@@ -1,0 +1,22 @@
+{
+  "name": "@martinszeltins/encrypt",
+  "version": "1.0.0",
+  "description": "Encrypt text and files using AES-256-CBC",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "encrypt": "./cli.js"
+  },
+  "keywords": [
+    "encrypt",
+    "encryption",
+    "aes",
+    "security",
+    "crypto"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
