@@ -11,12 +11,29 @@
     "encrypt",
     "encryption",
     "aes",
+    "aes-256-cbc",
     "security",
-    "crypto"
+    "crypto",
+    "cryptography",
+    "cipher",
+    "openssl"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Martins Zeltins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinszeltins/encrypt.git"
+  },
+  "homepage": "https://github.com/martinszeltins/encrypt#readme",
+  "bugs": {
+    "url": "https://github.com/martinszeltins/encrypt/issues"
+  },
   "engines": {
     "node": ">=12.0.0"
-  }
+  },
+  "files": [
+    "index.js",
+    "cli.js",
+    "README.md"
+  ]
 }
