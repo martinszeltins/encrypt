@@ -1,12 +1,13 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import argon2 from 'argon2';
 
-const ALGORITHM = 'aes-256-cbc';
-const SALT_LENGTH = 8;
+const ALGORITHM = 'aes-256-gcm';
+const SALT_LENGTH = 16;
 const KEY_LENGTH = 32;
-const IV_LENGTH = 16;
-const PBKDF2_ITERATIONS = 10000;
+const NONCE_LENGTH = 12;
+const AUTH_TAG_LENGTH = 16;
 
 // Function to get password from user
 function getPassword() {
@@ -17,7 +18,7 @@ function getPassword() {
         stdin.setEncoding('utf8');
 
         let password = '';
-        process.stdout.write('enter aes-256-cbc encryption password: ');
+        process.stdout.write('enter aes-256-gcm encryption password: ');
 
         if (stdin.isTTY) {
             // TTY mode - hide password input and read character by character
@@ -63,13 +64,20 @@ function getPassword() {
     });
 }
 
-// Derive key and IV from password using PBKDF2 (matching OpenSSL's behavior)
-function deriveKeyAndIV(password, salt) {
-    const key = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH + IV_LENGTH, 'sha256');
-    return {
-        key: key.slice(0, KEY_LENGTH),
-        iv: key.slice(KEY_LENGTH, KEY_LENGTH + IV_LENGTH)
-    };
+// Derive key from password using Argon2id (memory-hard, GPU-resistant)
+// Note: For GCM, we don't derive the nonce - it must be random
+async function deriveKey(password, salt) {
+    const hash = await argon2.hash(password, {
+        type: argon2.argon2id,
+        salt: salt,
+        saltLength: SALT_LENGTH,
+        hashLength: KEY_LENGTH,
+        timeCost: 3,        // iterations
+        memoryCost: 65536,  // 64 MB (memory-hard)
+        parallelism: 4,     // threads
+        raw: true           // return raw bytes, not encoded
+    });
+    return hash;
 }
 
 // Function to encrypt text and output base64
@@ -77,15 +85,29 @@ async function encryptText(plainText) {
     try {
         const password = await getPassword();
         const salt = crypto.randomBytes(SALT_LENGTH);
-        const { key, iv } = deriveKeyAndIV(password, salt);
+        const nonce = crypto.randomBytes(NONCE_LENGTH);
+        const key = await deriveKey(password, salt);
 
-        const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+        const cipher = crypto.createCipheriv(ALGORITHM, key, nonce);
         
-        // Create buffer with "Salted__" header + salt + encrypted data (matching OpenSSL format)
+        // Add AAD (Additional Authenticated Data) - timestamp for text
+        const aad = Buffer.from(`text:${Date.now()}`, 'utf8');
+        cipher.setAAD(aad);
+        
+        // Encrypt the data
         const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+        const authTag = cipher.getAuthTag();
+        
+        // Format: aadLength(2) + salt(16) + nonce(12) + authTag(16) + aad + encrypted data
+        const aadLength = Buffer.allocUnsafe(2);
+        aadLength.writeUInt16BE(aad.length);
+        
         const result = Buffer.concat([
-            Buffer.from('Salted__', 'utf8'),
+            aadLength,
             salt,
+            nonce,
+            authTag,
+            aad,
             encrypted
         ]);
 
@@ -105,29 +127,39 @@ async function encryptFile(inputFile) {
         const password = await getPassword();
         const outputFile = `${inputFile}.enc`;
         const salt = crypto.randomBytes(SALT_LENGTH);
-        const { key, iv } = deriveKeyAndIV(password, salt);
+        const nonce = crypto.randomBytes(NONCE_LENGTH);
+        const key = await deriveKey(password, salt);
 
-        const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+        const cipher = crypto.createCipheriv(ALGORITHM, key, nonce);
         
-        const input = fs.createReadStream(inputFile);
-        const output = fs.createWriteStream(outputFile);
-
-        // Write OpenSSL-compatible header
-        output.write(Buffer.from('Salted__', 'utf8'));
-        output.write(salt);
-
-        input.pipe(cipher).pipe(output);
-
-        output.on('finish', () => {
-            console.log('');
-            console.log(`👉 Encrypted file: ${path.resolve(outputFile)}`);
-            console.log('');
-        });
-
-        output.on('error', (error) => {
-            console.error('Encryption failed:', error.message);
-            process.exit(1);
-        });
+        // Add AAD (Additional Authenticated Data) - original filename
+        const filename = path.basename(inputFile);
+        const aad = Buffer.from(`file:${filename}`, 'utf8');
+        cipher.setAAD(aad);
+        
+        // Read entire file for GCM (GCM needs auth tag after encryption)
+        const inputData = fs.readFileSync(inputFile);
+        const encrypted = Buffer.concat([cipher.update(inputData), cipher.final()]);
+        const authTag = cipher.getAuthTag();
+        
+        // Format: aadLength(2) + salt(16) + nonce(12) + authTag(16) + aad + encrypted data
+        const aadLength = Buffer.allocUnsafe(2);
+        aadLength.writeUInt16BE(aad.length);
+        
+        const result = Buffer.concat([
+            aadLength,
+            salt,
+            nonce,
+            authTag,
+            aad,
+            encrypted
+        ]);
+        
+        fs.writeFileSync(outputFile, result);
+        
+        console.log('');
+        console.log(`👉 Encrypted file: ${path.resolve(outputFile)}`);
+        console.log('');
     } catch (error) {
         console.error('Encryption failed:', error.message);
         process.exit(1);

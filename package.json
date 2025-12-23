@@ -1,7 +1,7 @@
 {
   "name": "@martinszeltins/encrypt",
-  "version": "1.0.0",
-  "description": "Encrypt text and files using AES-256-CBC",
+  "version": "2.0.0",
+  "description": "Encrypt text and files using AES-256-GCM with Argon2id key derivation",
   "type": "module",
   "main": "index.js",
   "bin": {
@@ -11,12 +11,15 @@
     "encrypt",
     "encryption",
     "aes",
-    "aes-256-cbc",
+    "aes-256-gcm",
+    "gcm",
+    "argon2",
+    "argon2id",
+    "authenticated-encryption",
     "security",
     "crypto",
     "cryptography",
-    "cipher",
-    "openssl"
+    "cipher"
   ],
   "author": "Martins Zeltins",
   "license": "MIT",
@@ -29,7 +32,10 @@
     "url": "https://github.com/martinszeltins/encrypt/issues"
   },
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "argon2": "^0.31.2"
   },
   "files": [
     "index.js",
